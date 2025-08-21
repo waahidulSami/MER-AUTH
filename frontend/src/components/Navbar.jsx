@@ -7,6 +7,14 @@ const Navbar = () => {
 
   const {userData , isAccountVerify,  backendUrl ,setUserData , setIsLoggedIn }  = useContext(AppContext)
   console.log(userData , isAccountVerify)
+
+  const logout = async () => {
+    try {
+      
+    } catch (error) {
+      
+    }
+  }
   return (
     <div className="w-full flex justify-between items-center p-4 sm:p-6 sm:px-24 absolute top-0">
       <img src={assets.logo} className="w-28 sm:w-32" alt="logo" />

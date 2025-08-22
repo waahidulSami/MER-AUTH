@@ -92,7 +92,7 @@ const onSubmitHandler = async (e) => {
           <div className="mb-4 flex items-center gap-3 w-full px-5 py-2.5 bg-[#33345c] rounded-full">
             <img src={assets.mail_icon} alt="" />
             <input
-                 onChange={e => setEmail(e.target.value)}
+              onChange={e => setEmail(e.target.value)}
               value={email}
               type="email"
               placeholder="Email"

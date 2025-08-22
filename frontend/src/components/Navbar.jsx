@@ -2,19 +2,43 @@ import React, { useContext } from 'react'
 import { assets } from '../assets/assets'
 import {useNavigate} from "react-router-dom"
 import { AppContext } from '../context/AppContext.jsx'
+import { toast } from 'react-toastify'
+import axios from 'axios'
 const Navbar = () => {
   const navigate = useNavigate()
 
-  const {userData , isAccountVerify,  backendUrl ,setUserData , setIsLoggedIn }  = useContext(AppContext)
-  console.log(userData , isAccountVerify)
+  const {userData , isAccountVerify,  backendUrl
+     ,setUserData , setIsLoggedIn }  = useContext(AppContext)
 
-  const logout = async () => {
+     const sendVerification = async () => {
+   try {
+       axios.defaults.withCredentials = true;
+ 
+       const {data} = await axios.post(backendUrl + '/api/auth/send-verify-otp')
+       if (data.success) {
+         navigate('/verifyEmail')
+         toast.success(data.message)
+       } else {
+         toast.error(data.message)
+       }
+   } catch (error) {
+    toast.error(error.message)
+   }
+     }
+
+
+const logout = async () => {
     try {
-      
+      axios.defaults.withCredentials = true
+      const {data} = await axios.post(backendUrl + '/api/auth/logout')
+      data.success && setIsLoggedIn(false)
+      data.success && setUserData (false)
+      navigate('/')
     } catch (error) {
-      
+      toast.error(error.message)
     }
   }
+  
   return (
     <div className="w-full flex justify-between items-center p-4 sm:p-6 sm:px-24 absolute top-0">
       <img src={assets.logo} className="w-28 sm:w-32" alt="logo" />
@@ -32,14 +56,15 @@ const Navbar = () => {
                   max-h-0 opacity-0 group-hover:max-h-40 group-hover:opacity-100 transition-all duration-300 ease-in-out">
     <ul className="flex flex-col">
       {!isAccountVerify && 
-      <li className="px-4 py-2 hover:bg-gray-200 cursor-pointer ">Verify Email</li>
+      <li onClick={sendVerification} className="px-4 py-2
+       hover:bg-gray-200 cursor-pointer"
+       >Verify Email</li>
       }
       
-      <li className="px-4 py-2 hover:bg-gray-200 cursor-pointer">Logout</li>
+      <li onClick={logout} className="px-4 py-2 hover:bg-gray-200 cursor-pointer">Logout</li>
     </ul>
   </div>
 </div>
-
 
 ) : (
   <button

@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import userModel from "../model/user.model.js";
 import transpoter from "../Config/nodemailer.js";
-
+import { EMAIL_VERIFY_TEMPLATE, PASSWORD_RESET_TEMPLATE } from "../Config/emailTemplates.js";
 export const register = async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -145,7 +145,8 @@ export const sendVerfyOtp = async (req, res) => {
       from: process.env.SENDER_EMAIL,
       to: user.email,
       subject: "Account verification OTP",
-      text: `Hello ${user.name}, your OTP is: ${otp}. It will expire in 5 minutes.`,
+      // text: `Hello ${user.name}, your OTP is: ${otp}. It will expire in 5 minutes.`,
+        html:EMAIL_VERIFY_TEMPLATE.replace("{{otp}}" ,otp).replace("{{email}}", user.email)
     };
 
     await transpoter.sendMail(mailOptions);
@@ -225,8 +226,10 @@ export const sendResetOtp = async (req, res) => {
       from: process.env.SENDER_EMAIL,
       to: user.email,
       subject: "Password reset OTP",
-      text: `Hello ${user.name},Your OTP for resetting your password is ${otp}.
-Use this OTP to proceed with resetting your password`,
+//       text: `Hello ${user.name},Your OTP for resetting your password is ${otp}.
+// Use this OTP to proceed with resetting your password`,
+        html:PASSWORD_RESET_TEMPLATE.replace("{{otp}}" ,otp).replace("{{email}}", user.email)
+
     };
 
     await transpoter.sendMail(mailOptions);

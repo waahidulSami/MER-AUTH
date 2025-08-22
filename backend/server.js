@@ -12,7 +12,7 @@ const app = express();
 
 
 const allowedOrigins = [
-  "https://mer-auth-duwe.onrender.com"
+  "https://mer-auth-1.onrender.com"
 ];
 
 app.use(

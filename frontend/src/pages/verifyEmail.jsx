@@ -58,11 +58,7 @@ const { backendUrl, getUserData,userData, setIsAccountVerify,isAccountVerify ,is
   };
 
 
-useEffect(() => {
-  if (isLoggedIn && (userData?.isAccountVerify || navigate('/'))) {
-    navigate('/')
-  }
-}, [isLoggedIn, userData, isAccountVerify])
+
 
   return (
     <div className="flex items-center justify-center min-h-screen px-6 sm:px-0 bg-gradient-to-br from-blue-200 to-purple-300">

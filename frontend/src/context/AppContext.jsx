@@ -27,7 +27,7 @@ export const AppContextProvider = (props) => {
 
   const getUserData = async () => {
     try {
-      const { data } = await axios.get(`${backendUrl}/api/user/data`);
+      const { data } = await axios.get(`${backendUrl}/api/user/data`,{withCredentials: true});
       if (data.success) {
         setUserData(data.userData); // "sami"
         setIsAccountVerify(data.isAccountVerify); // true/false

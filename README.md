@@ -1,281 +1,234 @@
-# MERN Authentication System
+<div align="center">
 
-A production-ready, full-stack Authentication System built with the MERN stack (MongoDB, Express, React, Node.js). Features short-lived access tokens, long-lived refresh tokens with token rotation, hashed OTP verification for email verification & password reset, IP-based rate limiting, secure HTTP-only cookies, and Redux Toolkit state management.
+  <img src="https://img.shields.io/badge/MERN-Auth-blue?style=for-the-badge&logo=mongodb&logoColor=white" alt="MERN Auth Banner" />
 
----
+  # 🔐 Modern MERN Authentication Starter
 
-## Table of Contents
+  **Production-grade, security-hardened authentication boilerplate for full-stack Node.js & React applications.**
 
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Requirements](#requirements)
-- [Installation & Setup](#installation--setup)
-- [Environment Variables](#environment-variables)
-- [Authentication Architecture](#authentication-architecture)
-- [API Overview](#api-overview)
-- [Security Features](#security-features)
-- [Testing](#testing)
-- [Development Commands](#development-commands)
-- [Contributing](#contributing)
-- [License](#license)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+  [![Node.js](https://img.shields.io/badge/Node.js-v18%2B-green.svg?style=flat-square&logo=nodedotjs)](https://nodejs.org)
+  [![React](https://img.shields.io/badge/React-v19-61DAFB.svg?style=flat-square&logo=react)](https://react.dev)
+  [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC.svg?style=flat-square&logo=tailwindcss)](https://tailwindcss.com)
+  [![Express](https://img.shields.io/badge/Express.js-v4-000000.svg?style=flat-square&logo=express)](https://expressjs.com)
+  [![MongoDB](https://img.shields.io/badge/MongoDB-v7-47A248.svg?style=flat-square&logo=mongodb)](https://mongodb.com)
 
----
+  [Key Features](#-key-features) •
+  [Architecture](#-architecture) •
+  [Getting Started](#-getting-started) •
+  [API Endpoints](#-api-endpoints) •
+  [Security](#-security-features) •
+  [Testing](#-testing)
 
-## Features
-
-- 🔐 **Dual-Token Authentication**: Short-lived Access Tokens (15m) + Long-lived Refresh Tokens (7d).
-- 🔄 **Refresh Token Rotation & Revocation**: Automatically invalidates and rotates refresh tokens on renewal or logout.
-- 🛡️ **Hashed OTP Verification**: Secure SHA-256 hashed storage for Email Verification and Password Reset OTPs with timing-safe comparison.
-- ⏳ **Rate Limiting**: Protects login, registration, and OTP generation endpoints against brute-force attacks and abuse.
-- 🍪 **Secure HTTP-Only Cookies**: Tokens are passed via `httpOnly`, `sameSite`, and `secure` flags preventing XSS token theft.
-- 🛡️ **Security Headers**: Integrated `helmet` middleware for security-hardened HTTP headers.
-- ⚛️ **State Management**: React state managed with Redux Toolkit and Async Thunks.
-- 🎨 **Modern UI**: Clean UI built with React 19, Tailwind CSS, and Lucide React icons.
-- 🧪 **Automated Testing**: Integration test suite using Vitest, Supertest, and `mongodb-memory-server`.
+</div>
 
 ---
 
-## Tech Stack
+## ⚡ Overview
+
+A complete, feature-rich authentication solution built on the **MERN Stack** (MongoDB, Express, React, Node.js). Designed out of the box with modern security best practices including short-lived Access Tokens, Refresh Token Rotation with database revocation, hashed OTP generation for email verification and password resets, IP-based rate limiting, and HTTP-only secure cookie delivery.
+
+---
+
+## ✨ Key Features
+
+- 🔐 **Dual-Token System**: Short-lived Access Token (`15m`) + Long-lived Refresh Token (`7d`).
+- 🔄 **Refresh Token Rotation & Revocation**: Automatic rotation on refresh with immediate revocation on logout or reuse detection.
+- 🛡️ **Hashed OTP Storage**: SHA-256 hashed OTPs stored in database with timing-safe comparison (`crypto.timingSafeEqual`).
+- 🛑 **Rate Limiting Protection**: `express-rate-limit` protecting auth & OTP endpoints from brute-force attacks.
+- 🍪 **Secure Cookie Transport**: Configured with `httpOnly`, `secure`, and `sameSite` flags to prevent XSS & CSRF credential theft.
+- 🧠 **Redux Toolkit Integration**: Global authentication state management with Redux Async Thunks.
+- 🎨 **Modern UI Components**: React 19 interface styled with Tailwind CSS and Lucide React icons.
+- 🛡️ **Startup Environment Validation**: Automatic schema verification of critical server environment variables.
+- 🧪 **Zero-Config Testing**: Automated integration test suite powered by Vitest & `mongodb-memory-server`.
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant Frontend as React (Redux)
+    participant Backend as Express API
+    participant DB as MongoDB
+
+    User->>Frontend: Login Request (email, password)
+    Frontend->>Backend: POST /api/auth/login
+    Backend->>DB: Fetch user & verify password hash
+    Backend-->>Frontend: Set Access (15m) & Refresh Token (7d) in HTTP-only Cookies
+    
+    Note over Frontend,Backend: Authenticated Requests Pass Access Token Cookie
+
+    Frontend->>Backend: GET /api/user/data (with Access Token)
+    Backend-->>Frontend: Return User Profile
+
+    Note over Frontend,Backend: On Access Token Expiry (15m)
+
+    Frontend->>Backend: POST /api/auth/refresh-token (with Refresh Token)
+    Backend->>DB: Verify & rotate Refresh Token in DB
+    Backend-->>Frontend: Issue new Access & Refresh Token pair
+```
+
+---
+
+## 🛠️ Tech Stack
 
 ### Backend
-- **Runtime**: Node.js
-- **Framework**: Express.js
-- **Database**: MongoDB with Mongoose ORM
-- **Authentication**: JSON Web Tokens (`jsonwebtoken`), `bcryptjs`, `crypto`
-- **Security & Utilities**: `helmet`, `express-rate-limit`, `cookie-parser`, `cors`, `dotenv`
-- **Email**: `nodemailer`
+- **Core**: Node.js, Express.js
+- **Database**: MongoDB & Mongoose ORM
+- **Security**: JWT (`jsonwebtoken`), `bcryptjs`, SHA-256 (`crypto`), `helmet`, `express-rate-limit`, `cookie-parser`
+- **Email Dispatch**: `nodemailer`
 - **Testing**: `vitest`, `supertest`, `mongodb-memory-server`
 
 ### Frontend
-- **Framework**: React 19 (Vite)
-- **State Management**: Redux Toolkit (`@reduxjs/toolkit`), `react-redux`
-- **Routing**: `react-router-dom`
-- **HTTP Client**: `axios`
-- **Styling**: Tailwind CSS
-- **Notifications**: `react-toastify`
+- **Core**: React 19, Vite
+- **State**: Redux Toolkit (`@reduxjs/toolkit`), `react-redux`
+- **Routing & HTTP**: `react-router-dom`, `axios` (with `withCredentials: true`)
+- **Styling & UI**: Tailwind CSS, `lucide-react`, `react-toastify`
 
 ---
 
-## Project Structure
+## 📁 Repository Structure
 
 ```text
-.
+MERN-AUTH/
 ├── backend/
-│   ├── Config/
-│   │   ├── Db.name.js
-│   │   ├── emailTemplates.js
-│   │   ├── mongodb.js
-│   │   ├── nodemailer.js
-│   │   └── validateEnv.js
-│   ├── controller/
-│   │   ├── auth.Controllers.js
-│   │   └── user.controllers.js
-│   ├── middleware/
-│   │   ├── auth.midel.js
-│   │   └── rateLimiter.js
-│   ├── model/
-│   │   └── user.model.js
-│   ├── routes/
-│   │   ├── auth.routes.js
-│   │   └── user.routes.js
-│   ├── tests/
-│   │   └── auth.test.js
-│   ├── .env.example
-│   ├── package.json
-│   └── server.js
+│   ├── Config/          # MongoDB, Mailer, & Env Validation logic
+│   ├── controller/      # Auth & User business logic
+│   ├── middleware/      # Auth & Rate limiter middlewares
+│   ├── model/           # Mongoose schemas
+│   ├── routes/          # API route definitions
+│   ├── tests/           # Integration test suite
+│   ├── .env.example     # Safe backend env template
+│   └── server.js        # Entry point
 ├── frontend/
 │   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── redux/
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   ├── .env.example
-│   ├── package.json
+│   │   ├── components/  # Reusable UI components
+│   │   ├── pages/       # Login, Register, Verify, Reset pages
+│   │   └── redux/       # Auth slices and Async Thunks
+│   ├── .env.example     # Safe frontend env template
 │   └── vite.config.js
 └── README.md
 ```
 
 ---
 
-## Requirements
+## 🚀 Getting Started
 
-Before running the project, ensure you have:
+### Prerequisites
 
-- **Node.js**: `v18.x` or higher
-- **npm**: `v9.x` or higher
-- **MongoDB**: A running local MongoDB instance or a MongoDB Atlas connection string
-- **SMTP Server**: Credentials for sending verification emails (e.g., Brevo, SendGrid, Gmail SMTP)
+- **Node.js**: `v18.0.0` or higher
+- **npm**: `v9.0.0` or higher
+- **MongoDB**: Local instance or [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
+- **SMTP Provider**: SMTP credentials for sending verification emails (e.g., Brevo, SendGrid, Gmail)
 
----
-
-## Installation & Setup
-
-### 1. Clone the repository
+### 1️⃣ Clone & Setup Environment
 
 ```bash
-git clone https://github.com/your-username/MERN-AUTH.git
+# Clone the repository
+git clone https://github.com/wahidulsami/MERN-AUTH.git
 cd MERN-AUTH
-```
 
-### 2. Configure Environment Variables
-
-Create `.env` files in both `backend/` and `frontend/` folders using the provided `.env.example` templates:
-
-```bash
+# Set up environment files
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
 ```
 
-Fill in the appropriate configuration values (see [Environment Variables](#environment-variables)).
+### 2️⃣ Configure Environment Variables
 
-### 3. Install Backend Dependencies & Start Server
+Edit `backend/.env`:
 
+```env
+PORT=3000
+NODE_ENV=development
+MONGODB_URI=mongodb://localhost:27017/mern-auth
+JWT_SECRET=your_super_secret_access_key
+REFRESH_TOKEN_SECRET=your_super_secret_refresh_key
+SENDER_EMAIL=noreply@yourdomain.com
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=your_smtp_username
+SMTP_PASS=your_smtp_password
+```
+
+Edit `frontend/.env`:
+
+```env
+VITE_BECKEND_URL=http://localhost:3000
+```
+
+### 3️⃣ Run Application
+
+**Start Backend**:
 ```bash
 cd backend
 npm install
 npm run dev
 ```
 
-### 4. Install Frontend Dependencies & Start App
-
-In a new terminal window:
-
+**Start Frontend** (in a new terminal):
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
----
-
-## Environment Variables
-
-### Backend (`backend/.env`)
-
-| Variable | Description | Example |
-|---|---|---|
-| `PORT` | Server listening port | `3000` |
-| `NODE_ENV` | Application environment | `development` or `production` |
-| `MONGODB_URI` | MongoDB connection string | `mongodb://localhost:27017/mern-auth` |
-| `JWT_SECRET` | Secret key for signing Access Tokens | `your_super_secret_access_key` |
-| `REFRESH_TOKEN_SECRET` | Secret key for signing Refresh Tokens | `your_super_secret_refresh_key` |
-| `SENDER_EMAIL` | Sender email address for outgoing emails | `noreply@yourdomain.com` |
-| `SMTP_HOST` | SMTP server hostname | `smtp.example.com` |
-| `SMTP_PORT` | SMTP port | `587` |
-| `SMTP_USER` | SMTP username | `smtp_user` |
-| `SMTP_PASS` | SMTP password | `smtp_password` |
-
-### Frontend (`frontend/.env`)
-
-| Variable | Description | Example |
-|---|---|---|
-| `VITE_BECKEND_URL` | Base URL of the backend API | `http://localhost:3000` |
+Visit `http://localhost:5173` in your browser.
 
 ---
 
-## Authentication Architecture
+## 📡 API Endpoints
 
-```text
-User Request
-     │
-     ▼
-[ POST /api/auth/login ]
-     │
-     ▼
-Validate Credentials (bcrypt.compare)
-     │
-     ├─────────────► Issue Access Token (15m, HTTP-only Cookie)
-     └─────────────► Issue Refresh Token (7d, HTTP-only Cookie + Stored in DB)
-     │
-     ▼
-Authenticated API Requests (via userAuth Middleware)
-     │
-     ├─► Access Token Valid ──► Proceed to Controller
-     └─► Access Token Expired ─► [ POST /api/auth/refresh-token ]
-                                      │
-                                      ▼
-                               Rotate Tokens (Issue New Access + Refresh Token)
-```
+### 🔐 Authentication Routes (`/api/auth`)
 
----
-
-## API Overview
-
-### Authentication Routes (`/api/auth`)
-
-| Method | Endpoint | Protection | Description | Rate Limit |
+| Method | Endpoint | Access | Description | Rate Limit |
 |---|---|---|---|---|
-| `POST` | `/api/auth/register` | Public | Register a new user account | 10 req / 15m |
-| `POST` | `/api/auth/login` | Public | Authenticate user & issue tokens | 10 req / 15m |
-| `POST` | `/api/auth/logout` | Public | Revoke tokens & clear cookies | None |
-| `POST` | `/api/auth/refresh-token` | Public | Issue new token pair via refresh token | None |
-| `GET` | `/api/auth/is-Auth` | Authenticated | Verify active session status | None |
-| `POST` | `/api/auth/send-verify-otp` | Authenticated | Send email verification OTP | 5 req / 15m |
-| `POST` | `/api/auth/verfiy-account` | Authenticated | Verify account with OTP | None |
-| `POST` | `/api/auth/send-reset-otp` | Public | Send password reset OTP | 5 req / 15m |
-| `POST` | `/api/auth/reset-password` | Public | Reset password using OTP | None |
+| `POST` | `/register` | Public | Register new user | 10 req / 15m |
+| `POST` | `/login` | Public | Authenticate user & issue cookie tokens | 10 req / 15m |
+| `POST` | `/logout` | Public | Revoke session & clear HTTP cookies | - |
+| `POST` | `/refresh-token` | Public | Rotate refresh token & issue new token pair | - |
+| `GET` | `/is-Auth` | Protected | Verify active authenticated session | - |
+| `POST` | `/send-verify-otp` | Protected | Send 6-digit email verification OTP | 5 req / 15m |
+| `POST` | `/verfiy-account` | Protected | Verify email using 6-digit OTP | - |
+| `POST` | `/send-reset-otp` | Public | Request password reset OTP via email | 5 req / 15m |
+| `POST` | `/reset-password` | Public | Reset password using verified OTP | - |
 
-### User Routes (`/api/user`)
+### 👤 User Routes (`/api/user`)
 
-| Method | Endpoint | Protection | Description |
+| Method | Endpoint | Access | Description |
 |---|---|---|---|
-| `GET` | `/api/user/data` | Authenticated | Get profile details of authenticated user |
+| `GET` | `/data` | Protected | Fetch profile details of logged-in user |
 
 ---
 
-## Security Features
+## 🔒 Security Features
 
-1. **Password Hashing**: Passwords are hashed using `bcryptjs` (salt rounds: 10).
-2. **Hashed OTP Storage**: OTPs are hashed using SHA-256 before storage to prevent exposure in database compromises.
-3. **Timing-Safe Comparison**: OTP comparison uses `crypto.timingSafeEqual` to protect against timing attacks.
-4. **Token Security**: Tokens are delivered in `httpOnly` cookies to prevent client-side JavaScript access and XSS vulnerability risks.
-5. **Rate Limiting**: Brute-force attacks on auth endpoints and OTP spamming are mitigated using `express-rate-limit`.
-6. **Environment Validation**: Server startup performs schema checks on critical environment variables to prevent silent misconfigurations.
-7. **CORS Control**: Configured origin checks with strict credential support (`credentials: true`).
+- **Salted Password Hashing**: Passwords hashed with `bcryptjs` (cost factor 10).
+- **Hashed OTP Storage**: Raw 6-digit OTPs are never stored in DB; only SHA-256 hashes are saved.
+- **Timing-Attack Resistance**: OTP matching performed using `crypto.timingSafeEqual`.
+- **XSS & CSRF Mitigations**: Session tokens are passed exclusively in `httpOnly` secure cookies with strict `sameSite` policies.
+- **IP Rate Limiting**: Endpoint-specific limits using `express-rate-limit` to prevent brute-force attacks.
+- **Startup Protection**: Application validates all required env variables before starting up.
 
 ---
 
-## Testing
+## 🧪 Testing
 
-Backend automated integration tests can be executed using Vitest:
+The backend includes automated integration tests using **Vitest** and **In-Memory MongoDB**:
 
 ```bash
 cd backend
 npm test
 ```
 
-This runs integration tests using `mongodb-memory-server` without modifying your live database.
-
 ---
 
-## Development Commands
+## 📄 License
 
-### Backend Commands
-- `npm run dev`: Start backend server with `nodemon`
-- `npm start`: Start production backend server
-- `npm test`: Run test suite with `vitest`
+Distributed under the MIT License. See [`LICENSE`](LICENSE) for more information.
 
-### Frontend Commands
-- `npm run dev`: Start Vite development server
-- `npm run build`: Build production assets
-- `npm run lint`: Run ESLint checks
-
----
-
-## Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the project repository.
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`).
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4. Push to the branch (`git push origin feature/AmazingFeature`).
-5. Open a Pull Request.
-
----
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
+<div align="center">
+  <sub>Built with ❤️ for the open-source community by <a href="https://github.com/wahidulsami">Wahidul Islam Sami</a></sub>
+</div>

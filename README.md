@@ -278,4 +278,4 @@ Contributions are welcome! Please follow these steps:
 
 ## License
 
-No license has been specified yet for this repository. Please consult the repository owner before using this code for commercial purposes.
+This project is licensed under the [MIT License](LICENSE).

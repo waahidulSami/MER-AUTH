@@ -1,9 +1,11 @@
 import rateLimit from "express-rate-limit";
 
+const isTest = process.env.NODE_ENV === "test";
+
 // Rate limiter for general auth endpoints (e.g. login, register)
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 requests per windowMs
+  max: isTest ? 1000 : 10, // Avoid hitting rate limits during general unit testing unless explicitly tested
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -15,7 +17,7 @@ export const authLimiter = rateLimit({
 // Stricter rate limiter for OTP generation to prevent abuse/spam
 export const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 OTP requests per windowMs
+  max: isTest ? 1000 : 5,
   standardHeaders: true,
   legacyHeaders: false,
   message: {

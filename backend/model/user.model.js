@@ -22,6 +22,10 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  verifyOtpAttempts: {
+    type: Number,
+    default: 0,
+  },
   isAccountVerified: {
     type: Boolean,
     default: false,
@@ -31,6 +35,10 @@ const userSchema = new mongoose.Schema({
     default: "",
   },
   resetOtpExpireAt: {
+    type: Number,
+    default: 0,
+  },
+  resetOtpAttempts: {
     type: Number,
     default: 0,
   },

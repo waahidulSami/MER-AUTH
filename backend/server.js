@@ -14,6 +14,11 @@ validateEnv();
 const app = express();
 const isDev = process.env.NODE_ENV !== "production";
 
+// Configure Express proxy trust for reverse proxies (Render, Nginx, Cloudflare)
+if (!isDev) {
+  app.set("trust proxy", 1);
+}
+
 const allowedOrigins = [
   "https://mer-auth-1.onrender.com",
   "http://localhost:5173",
@@ -44,7 +49,18 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/user", userRouter);
 
-connectDB();
-
+// Ensure MongoDB is connected BEFORE starting the HTTP server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+if (process.env.NODE_ENV !== "test") {
+  connectDB()
+    .then(() => {
+      app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    })
+    .catch((err) => {
+      console.error("Database connection failed. Exiting process.", err);
+      process.exit(1);
+    });
+}
+
+export default app;

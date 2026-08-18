@@ -3,11 +3,13 @@ import cors from "cors";
 import dotenv from "dotenv";
 import helmet from "helmet";
 import connectDB from "./Config/mongodb.js";
+import { validateEnv } from "./Config/validateEnv.js";
 import cookieParser from "cookie-parser";
 import authRouter from "./routes/auth.routes.js";
 import userRouter from "./routes/user.routes.js";
 
 dotenv.config();
+validateEnv();
 
 const app = express();
 const isDev = process.env.NODE_ENV !== "production";

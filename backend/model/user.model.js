@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const userSchma = new mongoose.Schema({
+const userSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
@@ -22,21 +22,24 @@ const userSchma = new mongoose.Schema({
     type: Number,
     default: 0,
   },
-isAccountVerify: {
+  isAccountVerified: {
     type: Boolean,
     default: false,
   },
-    resetOtp: {
+  resetOtp: {
     type: String,
-    default: '',
+    default: "",
   },
-   resetOtpExpireAt : {
+  resetOtpExpireAt: {
     type: Number,
     default: 0,
   },
+  refreshToken: {
+    type: String,
+    default: "",
+  },
 });
 
+const userModel = mongoose.models.user || mongoose.model("user", userSchema);
 
-const userModel =mongoose.models.user || mongoose.model('user' , userSchma)
-
-export default userModel
+export default userModel;

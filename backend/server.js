@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import helmet from "helmet";
 import connectDB from "./Config/mongodb.js";
 import cookieParser from "cookie-parser";
 import authRouter from "./routes/auth.routes.js";
@@ -9,12 +10,15 @@ import userRouter from "./routes/user.routes.js";
 dotenv.config();
 
 const app = express();
-
+const isDev = process.env.NODE_ENV !== "production";
 
 const allowedOrigins = [
-  "https://mer-auth-1.onrender.com"
+  "https://mer-auth-1.onrender.com",
+  "http://localhost:5173",
+  "http://localhost:3000",
 ];
 
+app.use(helmet());
 app.use(
   cors({
     origin: function (origin, callback) {
@@ -28,20 +32,17 @@ app.use(
   })
 );
 
-
 app.use(express.json());
-app.use(cookieParser()); // ✅ must come before routes
+app.use(cookieParser());
 
-// simple test route
 app.get("/", (req, res) => {
   res.send("API is running!");
 });
 
 app.use("/api/auth", authRouter);
-app.use('/api/user', userRouter)
+app.use("/api/user", userRouter);
 
 connectDB();
 
-// server run
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

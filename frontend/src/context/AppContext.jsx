@@ -1,6 +1,5 @@
 import axios from "axios";
 import { createContext, useEffect, useState } from "react";
-import { toast } from "react-toastify";
 
 export const AppContext = createContext();
 
@@ -10,41 +9,40 @@ export const AppContextProvider = (props) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userData, setUserData] = useState(null);
   const [isAccountVerify, setIsAccountVerify] = useState(false);
-
-  const getAuthState = async () => {
-    try {
-      const { data } = await axios.get(backendUrl + "/api/auth/is-Auth", {
-        withCredentials: true,
-      });
-      if (data.success) {
-        setIsLoggedIn(true);
-        getUserData();
-      }
-    } catch (error) {
-      toast.error(error.message);
-    }
-  };
+  const [authChecked, setAuthChecked] = useState(false);
 
   const getUserData = async () => {
     try {
-     const { data } = await axios.get(`${backendUrl}/api/user/data`, {
-  withCredentials: true,
-});
+      const { data } = await axios.get(`${backendUrl}/api/user/data`, {
+        withCredentials: true,
+      });
       if (data.success) {
-        setUserData(data.userData); // "sami"
-        setIsAccountVerify(data.isAccountVerify); // true/false
-      } else {
-        toast.error(data.message);
+        setUserData(data.userData);
+        setIsAccountVerify(data.isAccountVerify);
       }
-    } catch (error) {
-      toast.error(error.message);
+    } catch {
+      // Silently fail - auth state check will handle this
     }
   };
-  
 
   useEffect(() => {
+    const getAuthState = async () => {
+      try {
+        const { data } = await axios.get(backendUrl + "/api/auth/is-Auth", {
+          withCredentials: true,
+        });
+        if (data.success) {
+          setIsLoggedIn(true);
+          await getUserData();
+        }
+      } catch {
+        // Not logged in - no toast needed
+      } finally {
+        setAuthChecked(true);
+      }
+    };
     getAuthState();
-    getUserData()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const value = {
@@ -55,7 +53,8 @@ export const AppContextProvider = (props) => {
     setUserData,
     getUserData,
     isAccountVerify,
-    setIsAccountVerify
+    setIsAccountVerify,
+    authChecked,
   };
 
   return (

@@ -44,7 +44,6 @@ const onSubmitHandler = async (e) => {
       if (data.success) {
         setIsLoggedIn(true);
         getUserData()
-        console.log("Auth Response:", getUserData);
         navgiate('/');
       } else {
         toast.error(data.message);

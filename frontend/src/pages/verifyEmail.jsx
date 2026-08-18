@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useRef } from "react";
+import React, { useContext, useRef } from "react";
 import { assets } from "../assets/assets";
 import { useNavigate } from "react-router-dom";
 import { AppContext } from "../context/AppContext";
@@ -11,7 +11,7 @@ const VerifyEmail = () => {
 
   axios.defaults.withCredentials = true;
 
-const { backendUrl, getUserData,userData, setIsAccountVerify,isAccountVerify ,isLoggedIn  } = useContext(AppContext);
+const { backendUrl, getUserData, setIsAccountVerify } = useContext(AppContext);
 
 
   // Input navigation

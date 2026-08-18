@@ -8,12 +8,7 @@ import { useContext } from "react";
 import { AppContext } from "../context/AppContext";
 const Resetpassword = () => {
 
-  const { backendUrl,
-     getUserData,
-     userData,
-      setIsAccountVerify,
-      isAccountVerify ,
-      isLoggedIn  } = useContext(AppContext);
+  const { backendUrl } = useContext(AppContext);
       axios.defaults.withCredentials= true 
   
   const navigate = useNavigate();

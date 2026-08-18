@@ -4,7 +4,10 @@ import { DB_NAME } from "./Db.name.js";
 
 const connectDB = async () => {
    try {
-    const conectionDB =  await mongoose.connect(`${process.env.MONGODB_URI}/${DB_NAME}`)
+    const baseUri = process.env.MONGODB_URI.endsWith('/') 
+      ? process.env.MONGODB_URI 
+      : process.env.MONGODB_URI + '/';
+    const conectionDB = await mongoose.connect(`${baseUri}${DB_NAME}`)
 
     console.log(`mongodb connected !! DB host:${conectionDB.connection.host}`);
 

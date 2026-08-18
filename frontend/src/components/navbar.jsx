@@ -33,7 +33,7 @@ const logout = async () => {
       axios.defaults.withCredentials = true
       const {data} = await axios.post(backendUrl + '/api/auth/logout')
       data.success && setIsLoggedIn(false)
-      data.success && setUserData (false)
+      data.success && setUserData(null)
       navigate('/')
     } catch (error) {
       toast.error(error.message)

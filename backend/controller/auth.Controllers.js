@@ -11,7 +11,8 @@ const isDev = process.env.NODE_ENV !== "production";
 const accessTokenCookieOptions = {
   httpOnly: true,
   secure: !isDev,
-  sameSite: isDev ? "lax" : "lax", // Use lax for strict security unless cross-domain setup requires explicit origin check
+  sameSite: "lax",
+  path: "/",
   maxAge: 15 * 60 * 1000,
 };
 
@@ -19,29 +20,67 @@ const accessTokenCookieOptions = {
 const refreshTokenCookieOptions = {
   httpOnly: true,
   secure: !isDev,
-  sameSite: isDev ? "lax" : "lax",
+  sameSite: "lax",
+  path: "/",
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
-const generateAccessToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "15m" });
+const clearCookieOptions = {
+  httpOnly: true,
+  secure: !isDev,
+  sameSite: "lax",
+  path: "/",
 };
 
-const generateRefreshToken = (userId) => {
+// Fix #12: Strictly sign JWT with algorithm, issuer, and audience
+const generateAccessToken = (userId, tokenVersion = 0) => {
   return jwt.sign(
-    { id: userId, salt: crypto.randomBytes(16).toString("hex") },
-    process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET + "_refresh",
-    { expiresIn: "7d" }
+    { id: userId, tokenVersion },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: "15m",
+      algorithm: "HS256",
+      issuer: "mern-auth",
+      audience: "mern-auth-client",
+    }
   );
 };
 
+// Fix #13: Ensure REFRESH_TOKEN_SECRET is explicitly provided (no fallbacks)
+const generateRefreshToken = (userId) => {
+  if (!process.env.REFRESH_TOKEN_SECRET) {
+    throw new Error("REFRESH_TOKEN_SECRET environment variable is missing.");
+  }
+  return jwt.sign(
+    { id: userId, salt: crypto.randomBytes(16).toString("hex") },
+    process.env.REFRESH_TOKEN_SECRET,
+    {
+      expiresIn: "7d",
+      algorithm: "HS256",
+      issuer: "mern-auth",
+      audience: "mern-auth-client",
+    }
+  );
+};
+
+// Fix #4: Hash refresh token using SHA-256 before saving to DB
+const hashToken = (token) => {
+  return crypto.createHash("sha256").update(token).digest("hex");
+};
+
+// Fix #9: Secure OTP generation & SHA-256 Hashing
+const generateSecureOtp = () => {
+  // Fix #7: Use crypto.randomInt instead of Math.random()
+  return crypto.randomInt(100000, 1000000).toString();
+};
+
 const hashOtp = (otp) => {
-  return crypto.createHash("sha256").update(otp).digest("hex");
+  return crypto.createHash("sha256").update(String(otp)).digest("hex");
 };
 
 const compareOtp = (inputOtp, hashedOtp) => {
   if (!inputOtp || !hashedOtp) return false;
-  const inputHash = hashOtp(String(inputOtp));
+  const inputHash = hashOtp(inputOtp);
   try {
     const bufA = Buffer.from(inputHash);
     const bufB = Buffer.from(hashedOtp);
@@ -60,12 +99,13 @@ export const register = async (req, res) => {
   name = sanitizeString(name);
   email = sanitizeString(email).toLowerCase();
 
+  // Fix #17 & #19: Password minimum 12 characters
   if (!name || !email || typeof password !== "string" || !password) {
     return res.status(400).json({ success: false, message: "All fields are required and must be valid strings" });
   }
 
-  if (password.length < 6) {
-    return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
+  if (password.length < 12) {
+    return res.status(400).json({ success: false, message: "Password must be at least 12 characters" });
   }
 
   try {
@@ -75,16 +115,18 @@ export const register = async (req, res) => {
     }
 
     const hashPassword = await bcrypt.hash(password, 10);
-    const user = new userModel({ name, email, password: hashPassword });
+    const user = new userModel({ name, email, password: hashPassword, tokenVersion: 0 });
 
-    const accessToken = generateAccessToken(user._id);
+    const accessToken = generateAccessToken(user._id, user.tokenVersion);
     const refreshToken = generateRefreshToken(user._id);
 
-    user.refreshToken = refreshToken;
+    // Fix #4: Store hashed refresh token in DB
+    user.refreshTokenHash = hashToken(refreshToken);
     await user.save();
 
+    // Fix #11: Clear duplicate 'token' cookie and set canonical 'accessToken' & 'refreshToken'
+    res.clearCookie("token", clearCookieOptions);
     res.cookie("accessToken", accessToken, accessTokenCookieOptions);
-    res.cookie("token", accessToken, accessTokenCookieOptions);
     res.cookie("refreshToken", refreshToken, refreshTokenCookieOptions);
 
     const mailOptions = {
@@ -116,7 +158,8 @@ export const login = async (req, res) => {
   }
 
   try {
-    const user = await userModel.findOne({ email });
+    // Need password field explicitly since select: false
+    const user = await userModel.findOne({ email }).select("+password +tokenVersion");
     if (!user) {
       return res.status(401).json({ success: false, message: "Invalid credentials" });
     }
@@ -126,14 +169,15 @@ export const login = async (req, res) => {
       return res.status(401).json({ success: false, message: "Invalid credentials" });
     }
 
-    const accessToken = generateAccessToken(user._id);
+    const accessToken = generateAccessToken(user._id, user.tokenVersion || 0);
     const refreshToken = generateRefreshToken(user._id);
 
-    user.refreshToken = refreshToken;
+    // Fix #4: Store hashed refresh token
+    user.refreshTokenHash = hashToken(refreshToken);
     await user.save();
 
+    res.clearCookie("token", clearCookieOptions);
     res.cookie("accessToken", accessToken, accessTokenCookieOptions);
-    res.cookie("token", accessToken, accessTokenCookieOptions);
     res.cookie("refreshToken", refreshToken, refreshTokenCookieOptions);
 
     return res.json({
@@ -150,6 +194,7 @@ export const login = async (req, res) => {
   }
 };
 
+// Fix #3 & #4: Atomic Refresh Token Rotation & Hashed Storage
 export const refreshToken = async (req, res) => {
   const incomingRefreshToken = req.cookies.refreshToken;
 
@@ -160,27 +205,36 @@ export const refreshToken = async (req, res) => {
   try {
     const decoded = jwt.verify(
       incomingRefreshToken,
-      process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET + "_refresh"
+      process.env.REFRESH_TOKEN_SECRET,
+      {
+        algorithms: ["HS256"],
+        issuer: "mern-auth",
+        audience: "mern-auth-client",
+      }
     );
 
-    const user = await userModel.findById(decoded.id);
+    const incomingHash = hashToken(incomingRefreshToken);
+    const newRefreshToken = generateRefreshToken(decoded.id);
+    const newRefreshTokenHash = hashToken(newRefreshToken);
 
-    if (!user) {
-      return res.status(401).json({ success: false, message: "Invalid user session" });
-    }
+    // Fix #3: Atomic conditional findOneAndUpdate to prevent rotation race conditions
+    const updatedUser = await userModel.findOneAndUpdate(
+      {
+        _id: decoded.id,
+        refreshTokenHash: incomingHash,
+      },
+      {
+        $set: {
+          refreshTokenHash: newRefreshTokenHash,
+        },
+      },
+      { new: true }
+    ).select("+tokenVersion");
 
-    // Refresh Token Reuse Detection:
-    // If incoming refresh token is valid JWT but does not match DB, reuse/theft is suspected!
-    if (user.refreshToken !== incomingRefreshToken) {
-      // Invalidate existing session to protect user
-      user.refreshToken = "";
-      await user.save();
-
-      const clearCookieOptions = {
-        httpOnly: true,
-        secure: !isDev,
-        sameSite: isDev ? "lax" : "lax",
-      };
+    // If update returned null, token was reused, revoked, or invalid!
+    if (!updatedUser) {
+      // Theft/Reuse Detection: Revoke all refresh tokens for this user
+      await userModel.findByIdAndUpdate(decoded.id, { $set: { refreshTokenHash: "" } });
 
       res.clearCookie("accessToken", clearCookieOptions);
       res.clearCookie("token", clearCookieOptions);
@@ -189,19 +243,17 @@ export const refreshToken = async (req, res) => {
       return res.status(401).json({ success: false, message: "Refresh token reused or revoked. Session cleared." });
     }
 
-    // Rotate refresh token: issue new pair
-    const newAccessToken = generateAccessToken(user._id);
-    const newRefreshToken = generateRefreshToken(user._id);
+    const newAccessToken = generateAccessToken(updatedUser._id, updatedUser.tokenVersion || 0);
 
-    user.refreshToken = newRefreshToken;
-    await user.save();
-
+    res.clearCookie("token", clearCookieOptions);
     res.cookie("accessToken", newAccessToken, accessTokenCookieOptions);
-    res.cookie("token", newAccessToken, accessTokenCookieOptions);
     res.cookie("refreshToken", newRefreshToken, refreshTokenCookieOptions);
 
     return res.json({ success: true, message: "Token refreshed successfully" });
   } catch (error) {
+    res.clearCookie("accessToken", clearCookieOptions);
+    res.clearCookie("token", clearCookieOptions);
+    res.clearCookie("refreshToken", clearCookieOptions);
     return res.status(401).json({ success: false, message: "Invalid or expired refresh token" });
   }
 };
@@ -210,18 +262,12 @@ export const logout = async (req, res) => {
   try {
     const { refreshToken: currentRefreshToken } = req.cookies;
     if (currentRefreshToken && typeof currentRefreshToken === "string") {
-      const user = await userModel.findOne({ refreshToken: currentRefreshToken });
-      if (user) {
-        user.refreshToken = "";
-        await user.save();
-      }
+      const incomingHash = hashToken(currentRefreshToken);
+      await userModel.findOneAndUpdate(
+        { refreshTokenHash: incomingHash },
+        { $set: { refreshTokenHash: "" } }
+      );
     }
-
-    const clearCookieOptions = {
-      httpOnly: true,
-      secure: !isDev,
-      sameSite: isDev ? "lax" : "lax",
-    };
 
     res.clearCookie("accessToken", clearCookieOptions);
     res.clearCookie("token", clearCookieOptions);
@@ -247,13 +293,17 @@ export const sendVerfyOtp = async (req, res) => {
       return res.status(400).json({ success: false, message: "Account already verified" });
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Fix #7: Use crypto.randomInt
+    const otp = generateSecureOtp();
 
-    user.verifyOtp = hashOtp(otp);
-    user.verifyOtpExpireAt = Date.now() + 5 * 60 * 1000; // 5 mins
-    user.verifyOtpAttempts = 0; // reset failed attempts
-
-    await user.save();
+    // Fix #8: Atomic update to prevent race conditions on OTP sending
+    await userModel.findByIdAndUpdate(userId, {
+      $set: {
+        verifyOtp: hashOtp(otp),
+        verifyOtpExpireAt: Date.now() + 5 * 60 * 1000,
+        verifyOtpAttempts: 0,
+      },
+    });
 
     const mailOptions = {
       from: process.env.SENDER_EMAIL || "noreply@example.com",
@@ -277,58 +327,56 @@ export const sendVerfyOtp = async (req, res) => {
   }
 };
 
+// Fix #8: Atomic OTP Verification
 export const verfyEmail = async (req, res) => {
   const { userId } = req;
   const { otp } = req.body;
 
-  if (!otp || (typeof otp !== "string" && typeof otp !== "number")) {
-    return res.status(400).json({ success: false, message: "OTP is required" });
+  // Fix #19: Validate OTP format strictly (6 digits)
+  if (!otp || typeof otp !== "string" || !/^\d{6}$/.test(otp.trim())) {
+    return res.status(400).json({ success: false, message: "OTP must be exactly 6 numeric digits" });
   }
 
-  const strOtp = String(otp).trim();
+  const strOtp = otp.trim();
 
   try {
     const user = await userModel.findById(userId);
 
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
-
-    if (!user.verifyOtp) {
+    if (!user || !user.verifyOtp) {
       return res.status(400).json({ success: false, message: "Invalid or expired OTP" });
     }
 
-    // Check expiration BEFORE validating OTP value
+    // Expiration check
     if (user.verifyOtpExpireAt < Date.now()) {
-      user.verifyOtp = "";
-      user.verifyOtpExpireAt = 0;
-      user.verifyOtpAttempts = 0;
-      await user.save();
+      await userModel.findByIdAndUpdate(userId, {
+        $set: { verifyOtp: "", verifyOtpExpireAt: 0, verifyOtpAttempts: 0 },
+      });
       return res.status(400).json({ success: false, message: "OTP has expired" });
     }
 
-    // Check attempt limits (max 3 failed attempts)
+    // Max attempt check
     if (user.verifyOtpAttempts >= 3) {
-      user.verifyOtp = "";
-      user.verifyOtpExpireAt = 0;
-      user.verifyOtpAttempts = 0;
-      await user.save();
+      await userModel.findByIdAndUpdate(userId, {
+        $set: { verifyOtp: "", verifyOtpExpireAt: 0, verifyOtpAttempts: 0 },
+      });
       return res.status(400).json({ success: false, message: "Too many failed attempts. Please request a new OTP." });
     }
 
     if (!compareOtp(strOtp, user.verifyOtp)) {
-      user.verifyOtpAttempts = (user.verifyOtpAttempts || 0) + 1;
-      await user.save();
+      await userModel.findByIdAndUpdate(userId, { $inc: { verifyOtpAttempts: 1 } });
       return res.status(400).json({ success: false, message: "Invalid OTP" });
     }
 
-    // Single-use: Clear OTP immediately upon successful verification
-    user.isAccountVerified = true;
-    user.verifyOtp = "";
-    user.verifyOtpExpireAt = 0;
-    user.verifyOtpAttempts = 0;
+    // Atomic consumption: Clear OTP immediately upon verification
+    await userModel.findByIdAndUpdate(userId, {
+      $set: {
+        isAccountVerified: true,
+        verifyOtp: "",
+        verifyOtpExpireAt: 0,
+        verifyOtpAttempts: 0,
+      },
+    });
 
-    await user.save();
     return res.json({ success: true, message: "Email verified successfully" });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Server error" });
@@ -343,6 +391,7 @@ export const isAuthenticated = async (req, res) => {
   }
 };
 
+// Fix #6: Generic response to prevent account enumeration
 export const sendResetOtp = async (req, res) => {
   let { email } = req.body;
   email = sanitizeString(email).toLowerCase();
@@ -351,19 +400,27 @@ export const sendResetOtp = async (req, res) => {
     return res.status(400).json({ success: false, message: "Email is required" });
   }
 
+  const GENERIC_RESPONSE = {
+    success: true,
+    message: "If an account exists for this email, a password reset code has been sent.",
+  };
+
   try {
     const user = await userModel.findOne({ email });
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      // Return generic response without revealing account existence
+      return res.json(GENERIC_RESPONSE);
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otp = generateSecureOtp();
 
-    user.resetOtp = hashOtp(otp);
-    user.resetOtpExpireAt = Date.now() + 5 * 60 * 1000;
-    user.resetOtpAttempts = 0;
-
-    await user.save();
+    await userModel.findByIdAndUpdate(user._id, {
+      $set: {
+        resetOtp: hashOtp(otp),
+        resetOtpExpireAt: Date.now() + 5 * 60 * 1000,
+        resetOtpAttempts: 0,
+      },
+    });
 
     const mailOptions = {
       from: process.env.SENDER_EMAIL || "noreply@example.com",
@@ -378,12 +435,13 @@ export const sendResetOtp = async (req, res) => {
       console.error("Email sending error:", err.message);
     }
 
-    return res.json({ success: true, message: "OTP sent to your email" });
+    return res.json(GENERIC_RESPONSE);
   } catch (error) {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
+// Fix #10: Password Reset Invalidates All Existing Access Tokens via tokenVersion
 export const resetPassword = async (req, res) => {
   let { email, otp, newPassword } = req.body;
   email = sanitizeString(email).toLowerCase();
@@ -392,56 +450,64 @@ export const resetPassword = async (req, res) => {
     return res.status(400).json({ success: false, message: "All fields are required" });
   }
 
-  if (newPassword.length < 6) {
-    return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
+  if (newPassword.length < 12) {
+    return res.status(400).json({ success: false, message: "Password must be at least 12 characters" });
+  }
+
+  if (!/^\d{6}$/.test(String(otp).trim())) {
+    return res.status(400).json({ success: false, message: "OTP must be exactly 6 numeric digits" });
   }
 
   const strOtp = String(otp).trim();
 
   try {
     const user = await userModel.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
-
-    if (!user.resetOtp) {
+    if (!user || !user.resetOtp) {
       return res.status(400).json({ success: false, message: "Invalid or expired OTP" });
     }
 
-    // Expiry check first
+    // Expiry check
     if (user.resetOtpExpireAt < Date.now()) {
-      user.resetOtp = "";
-      user.resetOtpExpireAt = 0;
-      user.resetOtpAttempts = 0;
-      await user.save();
+      await userModel.findByIdAndUpdate(user._id, {
+        $set: { resetOtp: "", resetOtpExpireAt: 0, resetOtpAttempts: 0 },
+      });
       return res.status(400).json({ success: false, message: "OTP has expired" });
     }
 
-    // Max 3 failed attempts check
+    // Max 3 failed attempts
     if (user.resetOtpAttempts >= 3) {
-      user.resetOtp = "";
-      user.resetOtpExpireAt = 0;
-      user.resetOtpAttempts = 0;
-      await user.save();
+      await userModel.findByIdAndUpdate(user._id, {
+        $set: { resetOtp: "", resetOtpExpireAt: 0, resetOtpAttempts: 0 },
+      });
       return res.status(400).json({ success: false, message: "Too many failed attempts. Please request a new OTP." });
     }
 
     if (!compareOtp(strOtp, user.resetOtp)) {
-      user.resetOtpAttempts = (user.resetOtpAttempts || 0) + 1;
-      await user.save();
+      await userModel.findByIdAndUpdate(user._id, { $inc: { resetOtpAttempts: 1 } });
       return res.status(400).json({ success: false, message: "Invalid OTP" });
     }
 
     const hashPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashPassword;
-    user.resetOtp = "";
-    user.resetOtpExpireAt = 0;
-    user.resetOtpAttempts = 0;
-    user.refreshToken = ""; // Invalidate refresh token on password change to force re-login
 
-    await user.save();
+    // Fix #10: Increment tokenVersion to invalidate all previously issued access tokens!
+    await userModel.findByIdAndUpdate(user._id, {
+      $set: {
+        password: hashPassword,
+        resetOtp: "",
+        resetOtpExpireAt: 0,
+        resetOtpAttempts: 0,
+        refreshTokenHash: "", // Invalidate refresh tokens
+      },
+      $inc: {
+        tokenVersion: 1, // Invalidate active access tokens
+      },
+    });
 
-    return res.json({ success: true, message: "Password has been reset successfully" });
+    res.clearCookie("accessToken", clearCookieOptions);
+    res.clearCookie("token", clearCookieOptions);
+    res.clearCookie("refreshToken", clearCookieOptions);
+
+    return res.json({ success: true, message: "Password has been reset successfully. Please login again." });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Server error" });
   }

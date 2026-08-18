@@ -14,16 +14,19 @@ validateEnv();
 const app = express();
 const isDev = process.env.NODE_ENV !== "production";
 
-// Configure Express proxy trust for reverse proxies (Render, Nginx, Cloudflare)
+// Fix #16: Configure Express proxy trust for reverse proxies (Render, Nginx, Cloudflare)
 if (!isDev) {
   app.set("trust proxy", 1);
 }
 
+// Fix #21: Explicit CORS configuration using environment variables or exact allowlist
+const clientOrigin = process.env.CLIENT_ORIGIN;
 const allowedOrigins = [
+  clientOrigin,
   "https://mer-auth-1.onrender.com",
   "http://localhost:5173",
   "http://localhost:3000",
-];
+].filter(Boolean);
 
 app.use(helmet());
 app.use(
@@ -39,7 +42,8 @@ app.use(
   })
 );
 
-app.use(express.json());
+// Fix #20: Restrict JSON payload limit to 10kb to prevent Denial of Service payload attacks
+app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
 
 app.get("/", (req, res) => {
@@ -48,6 +52,15 @@ app.get("/", (req, res) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/user", userRouter);
+
+// Global Error Handler - Fix #23: Prevent leaks of stack traces or database errors
+app.use((err, req, res, next) => {
+  if (err.message === "Not allowed by CORS") {
+    return res.status(403).json({ success: false, message: "CORS error: Request origin not allowed" });
+  }
+  console.error("Internal Error:", err.message);
+  return res.status(500).json({ success: false, message: "Internal server error" });
+});
 
 // Ensure MongoDB is connected BEFORE starting the HTTP server
 const PORT = process.env.PORT || 3000;

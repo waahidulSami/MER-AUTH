@@ -18,11 +18,11 @@ const authRouter = express.Router();
 authRouter.post("/register", authLimiter, register);
 authRouter.post("/login", authLimiter, login);
 authRouter.post("/logout", logout);
-authRouter.post("/refresh-token", refreshToken);
+authRouter.post("/refresh-token", authLimiter, refreshToken);
 authRouter.post("/send-verify-otp", userAuth, otpLimiter, sendVerfyOtp);
 authRouter.post("/verfiy-account", userAuth, verfyEmail);
 authRouter.get("/is-Auth", userAuth, isAuthenticated);
 authRouter.post("/send-reset-otp", otpLimiter, sendResetOtp);
-authRouter.post("/reset-password", resetPassword);
+authRouter.post("/reset-password", authLimiter, resetPassword);
 
 export default authRouter;

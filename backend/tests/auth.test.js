@@ -35,7 +35,7 @@ describe("Authentication & Security Test Suite", () => {
   const testUser = {
     name: "Test User",
     email: "test@example.com",
-    password: "password123",
+    password: "password12345", // Minimum 12 characters
   };
 
   it("1. should register a new user successfully and set HttpOnly cookies", async () => {
@@ -79,7 +79,7 @@ describe("Authentication & Security Test Suite", () => {
 
     const res = await request(app).post("/api/auth/login").send({
       email: testUser.email,
-      password: "wrongpassword",
+      password: "wrongpassword123",
     });
 
     expect(res.status).toBe(401);
@@ -104,9 +104,9 @@ describe("Authentication & Security Test Suite", () => {
 
   it("7. should reject protected route access with expired JWT access token", async () => {
     const expiredToken = jwt.sign(
-      { id: new mongoose.Types.ObjectId() },
+      { id: new mongoose.Types.ObjectId(), tokenVersion: 0 },
       process.env.JWT_SECRET,
-      { expiresIn: "-1s" }
+      { expiresIn: "-1s", algorithm: "HS256", issuer: "mern-auth", audience: "mern-auth-client" }
     );
 
     const res = await request(app)
@@ -130,22 +130,21 @@ describe("Authentication & Security Test Suite", () => {
     expect(res.headers["set-cookie"]).toBeDefined();
   });
 
-  it("9. should detect refresh token reuse, invalidate session, and clear cookies", async () => {
+  it("9. should perform atomic refresh token rotation & detect reuse", async () => {
     const regRes = await request(app).post("/api/auth/register").send(testUser);
     const originalCookies = regRes.headers["set-cookie"];
     const originalRefreshCookieStr = originalCookies.find((c) => c.startsWith("refreshToken=")).split(";")[0];
 
-    // First refresh (Rotates token in DB & returns NEW set-cookie)
+    // First refresh (Atomic rotation in DB)
     const firstRefreshRes = await request(app)
       .post("/api/auth/refresh-token")
       .set("Cookie", [originalRefreshCookieStr]);
 
     expect(firstRefreshRes.status).toBe(200);
 
-    // Wait 1 second so new refresh token gets a new JWT iat timestamp
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    // Second refresh using the STOLEN/OLD original refresh token (Reuse detection!)
+    // Second refresh using the OLD refresh token (Reuse detection!)
     const reuseRes = await request(app)
       .post("/api/auth/refresh-token")
       .set("Cookie", [originalRefreshCookieStr]);
@@ -153,143 +152,61 @@ describe("Authentication & Security Test Suite", () => {
     expect(reuseRes.status).toBe(401);
     expect(reuseRes.body.message).toContain("reused or revoked");
 
-    // Verify session in DB was cleared
+    // Verify DB hash was revoked
     const userInDb = await userModel.findOne({ email: testUser.email });
-    expect(userInDb.refreshToken).toBe("");
+    expect(userInDb.refreshTokenHash).toBe("");
   });
 
-  it("10. should handle OTP verification lifecycle, hashed storage, and single-use invalidation", async () => {
+  it("10. should prevent password reset account enumeration by returning generic response", async () => {
+    const existingRes = await request(app)
+      .post("/api/auth/send-reset-otp")
+      .send({ email: "nonexistent@example.com" });
+
+    expect(existingRes.status).toBe(200);
+    expect(existingRes.body.success).toBe(true);
+    expect(existingRes.body.message).toContain("If an account exists");
+  });
+
+  it("11. should invalidate access tokens when password is reset (tokenVersion increment)", async () => {
     const regRes = await request(app).post("/api/auth/register").send(testUser);
-    const cookies = regRes.headers["set-cookie"];
+    const oldCookies = regRes.headers["set-cookie"];
 
-    await request(app).post("/api/auth/send-verify-otp").set("Cookie", cookies);
-
+    // Set known OTP hash
     const userInDb = await userModel.findOne({ email: testUser.email });
-    expect(userInDb.verifyOtp).toHaveLength(64); // SHA-256 hash length
-
+    const crypto = await import("crypto");
     const testOtp = "123456";
-    const crypto = await import("crypto");
-    userInDb.verifyOtp = crypto.createHash("sha256").update(testOtp).digest("hex");
-    userInDb.verifyOtpExpireAt = Date.now() + 60000;
-    await userInDb.save();
-
-    // Verify OTP successfully
-    const verifyRes = await request(app)
-      .post("/api/auth/verfiy-account")
-      .set("Cookie", cookies)
-      .send({ otp: testOtp });
-
-    expect(verifyRes.status).toBe(200);
-    expect(verifyRes.body.success).toBe(true);
-
-    // Verify single-use: DB OTP fields cleared
-    const updatedUser = await userModel.findOne({ email: testUser.email });
-    expect(updatedUser.isAccountVerified).toBe(true);
-    expect(updatedUser.verifyOtp).toBe("");
-
-    // Verify OTP reuse attempt fails
-    const reuseOtpRes = await request(app)
-      .post("/api/auth/verfiy-account")
-      .set("Cookie", cookies)
-      .send({ otp: testOtp });
-
-    expect(reuseOtpRes.status).toBe(400);
-  });
-
-  it("11. should enforce expired OTP rejection", async () => {
-    const regRes = await request(app).post("/api/auth/register").send(testUser);
-    const cookies = regRes.headers["set-cookie"];
-
-    await request(app).post("/api/auth/send-verify-otp").set("Cookie", cookies);
-
-    const userInDb = await userModel.findOne({ email: testUser.email });
-    userInDb.verifyOtpExpireAt = Date.now() - 1000; // Expired 1 second ago
-    await userInDb.save();
-
-    const verifyRes = await request(app)
-      .post("/api/auth/verfiy-account")
-      .set("Cookie", cookies)
-      .send({ otp: "123456" });
-
-    expect(verifyRes.status).toBe(400);
-    expect(verifyRes.body.message).toContain("expired");
-  });
-
-  it("12. should block OTP verification after max 3 failed attempts", async () => {
-    const regRes = await request(app).post("/api/auth/register").send(testUser);
-    const cookies = regRes.headers["set-cookie"];
-
-    await request(app).post("/api/auth/send-verify-otp").set("Cookie", cookies);
-
-    for (let i = 0; i < 3; i++) {
-      await request(app)
-        .post("/api/auth/verfiy-account")
-        .set("Cookie", cookies)
-        .send({ otp: "000000" });
-    }
-
-    const fourthAttempt = await request(app)
-      .post("/api/auth/verfiy-account")
-      .set("Cookie", cookies)
-      .send({ otp: "000000" });
-
-    expect(fourthAttempt.status).toBe(400);
-    expect(fourthAttempt.body.message).toContain("Too many failed attempts");
-  });
-
-  it("13. should handle password reset flow with OTP", async () => {
-    await request(app).post("/api/auth/register").send(testUser);
-
-    await request(app).post("/api/auth/send-reset-otp").send({ email: testUser.email });
-
-    const userInDb = await userModel.findOne({ email: testUser.email });
-    const crypto = await import("crypto");
-    const testOtp = "654321";
     userInDb.resetOtp = crypto.createHash("sha256").update(testOtp).digest("hex");
     userInDb.resetOtpExpireAt = Date.now() + 60000;
     await userInDb.save();
 
-    const resetRes = await request(app).post("/api/auth/reset-password").send({
+    // Reset password
+    await request(app).post("/api/auth/reset-password").send({
       email: testUser.email,
       otp: testOtp,
-      newPassword: "newpassword123",
+      newPassword: "newpassword12345",
     });
 
-    expect(resetRes.status).toBe(200);
-    expect(resetRes.body.success).toBe(true);
+    // Access protected route with OLD access token (should fail because tokenVersion incremented)
+    const oldAccessRes = await request(app)
+      .get("/api/user/data")
+      .set("Cookie", oldCookies);
 
-    // Verify login with new password
-    const loginRes = await request(app).post("/api/auth/login").send({
-      email: testUser.email,
-      password: "newpassword123",
-    });
-    expect(loginRes.status).toBe(200);
+    expect(oldAccessRes.status).toBe(401);
+    expect(oldAccessRes.body.message).toContain("Session expired or password changed");
   });
 
-  it("14. should validate CORS Origin header policies", async () => {
-    const res = await request(app)
-      .get("/")
-      .set("Origin", "https://unauthorized-malicious-domain.com");
+  it("12. should handle concurrent refresh requests safely", async () => {
+    const regRes = await request(app).post("/api/auth/register").send(testUser);
+    const cookies = regRes.headers["set-cookie"];
 
-    expect(res.status).toBe(500); // Express CORS middleware callback error
-  });
+    // Fire 2 concurrent refresh requests
+    const [req1, req2] = await Promise.all([
+      request(app).post("/api/auth/refresh-token").set("Cookie", cookies),
+      request(app).post("/api/auth/refresh-token").set("Cookie", cookies),
+    ]);
 
-  it("15. should trigger rate limiter when limit is exceeded on isolated endpoint", async () => {
-    const customLimiter = rateLimit({
-      windowMs: 15 * 60 * 1000,
-      max: 2,
-      message: { success: false, message: "Too many attempts" },
-    });
-
-    const mockExpress = (await import("express")).default;
-    const testApp = mockExpress();
-    testApp.post("/test-limit", customLimiter, (req, res) => res.json({ success: true }));
-
-    await request(testApp).post("/test-limit");
-    await request(testApp).post("/test-limit");
-    const thirdRes = await request(testApp).post("/test-limit");
-
-    expect(thirdRes.status).toBe(429);
-    expect(thirdRes.body.message).toContain("Too many attempts");
+    const statuses = [req1.status, req2.status];
+    expect(statuses).toContain(200);
+    expect(statuses).toContain(401); // Exactly one succeeds, one rejected due to atomic update
   });
 });

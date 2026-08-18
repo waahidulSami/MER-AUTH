@@ -4,7 +4,7 @@
 
   # 🔐 Modern MERN Authentication Starter
 
-  **Production-grade, security-hardened authentication boilerplate for full-stack Node.js & React applications.**
+  **Production-oriented, security-hardened authentication boilerplate for full-stack Node.js & React applications.**
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
   [![Node.js](https://img.shields.io/badge/Node.js-v18%2B-green.svg?style=flat-square&logo=nodedotjs)](https://nodejs.org)

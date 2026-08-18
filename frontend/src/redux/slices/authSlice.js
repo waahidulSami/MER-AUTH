@@ -2,7 +2,7 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 
 axios.defaults.withCredentials = true;
-const backendUrl = import.meta.env.VITE_BECKEND_URL;
+const backendUrl = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_BECKEND_URL;
 
 // Async Thunks
 export const checkAuthState = createAsyncThunk(

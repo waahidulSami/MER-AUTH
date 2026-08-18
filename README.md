@@ -156,7 +156,7 @@ SMTP_PASS=your_smtp_password
 Edit `frontend/.env`:
 
 ```env
-VITE_BECKEND_URL=http://localhost:3000
+VITE_BACKEND_URL=http://localhost:3000
 ```
 
 ### 3️⃣ Run Application
